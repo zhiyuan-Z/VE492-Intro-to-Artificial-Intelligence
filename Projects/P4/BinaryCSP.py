@@ -25,8 +25,7 @@ def consistent(assignment, csp, var, value):
     # TODO: Question 1
     for bC in csp.binaryConstraints:
         if bC.affects(var):
-            if assignment.isAssigned(bC.otherVariable(var)):
-                if not bC.isSatisfied(value, assignment.assignedValues.get(bC.otherVariable(var))):
+            if assignment.isAssigned(bC.otherVariable(var)) and not bC.isSatisfied(value, assignment.assignedValues[bC.otherVariable(var)]):
                     return False
     return True
     raise_undefined_error()
@@ -63,13 +62,14 @@ def recursiveBacktracking(assignment, csp, orderValuesMethod, selectVariableMeth
     if assignment.isComplete():
         return assignment
     var = selectVariableMethod(assignment, csp)
+    if var == None:
+        return assignment
     for value in orderValuesMethod(assignment, csp, var):
         if consistent(assignment, csp, var, value):
             assignment.assignedValues[var] = value
             inferences = inferenceMethod(assignment, csp, var, value)
             if inferences != None:
-                result = recursiveBacktracking(
-                    assignment, csp, orderValuesMethod, selectVariableMethod, inferenceMethod)
+                result = recursiveBacktracking(assignment, csp, orderValuesMethod, selectVariableMethod, inferenceMethod)
                 if result != None:
                     return result
                 for item in inferences:
@@ -129,8 +129,7 @@ def minimumRemainingValuesHeuristic(assignment, csp):
     domains = assignment.varDomains
 
     # TODO: Question 2
-    unassigned = [
-        var for var in assignment.varDomains if assignment.assignedValues[var] == None]
+    unassigned = [var for var in assignment.varDomains if not assignment.isAssigned(var)]
     if len(assignment.varDomains) != 0:
         min = list(unassigned)[0]
         for var in assignment.varDomains:
@@ -189,8 +188,7 @@ def leastConstrainingValuesHeuristic(assignment, csp, var):
         count = 0
         for constraint in constraints:
             if constraint.affects(var):
-                count += len([val for val in assignment.varDomains[constraint.otherVariable(
-                    var)] if constraint.isSatisfied(val, value)])
+                count += len([val for val in assignment.varDomains[constraint.otherVariable(var)] if not constraint.isSatisfied(val, value)])
         pairs.append((value, count))
     return [item[0] for item in sorted(pairs, key=lambda x: x[1])]
     raise_undefined_error()
@@ -230,22 +228,21 @@ def forwardChecking(assignment, csp, var, value):
     # TODO: Question 4
     if not consistent(assignment, csp, var, value):
         return None
-    connectedConstraints = [
-        constraint for constraint in csp.binaryConstraints if constraint.affects(var)]
+    connectedConstraints = [constraint for constraint in csp.binaryConstraints if constraint.affects(var)]
     for constraint in connectedConstraints:
         connectedVariable = constraint.otherVariable(var)
         if assignment.isAssigned(connectedVariable):
             if not constraint.isSatisfied(value, assignment.assignedValues[connectedVariable]):
-                return None
+                return None 
         else:
             domain = assignment.varDomains[connectedVariable].copy()
+            count = 0
             for val in domain:
-                count = 0
                 if not consistent(assignment, csp, connectedVariable, val):
                     inferences.add((connectedVariable, val))
                     count += 1
-                if len(domain) == count:
-                    return None
+            if len(domain) == count:
+                return None
     for inference in inferences:
         assignment.varDomains[inference[0]].remove(inference[1])
     return inferences
@@ -279,12 +276,6 @@ def revise(assignment, csp, var1, var2, constraint):
     inferences = set([])
 
     # TODO: Question 5
-    # revised = False
-    # domain1 = assignment.varDomains[var1].copy()
-    # for val1 in domain1:
-    #     if sum([constraint.isSatisfied(val1, val2) for val2 in assignment.varDomains[var2]]) == 0:
-    #         assignment.varDomains[var1].remove(val1)
-    #         revised = True
     revised = False
     domain2 = assignment.varDomains[var2].copy()
     for val2 in domain2:
@@ -365,17 +356,25 @@ def AC3(assignment, csp):
 
     # TODO: Question 6
     #  Hint: implement revise first and use it as a helper function"""
-    queue = csp.binaryConstraints
+    queue = []
+    for var in assignment.varDomains.keys():
+        queue += [(constraint.var1, constraint.var2) for constraint in csp.binaryConstraints if constraint.affects(var)]
     while queue != []:
-        constraint = queue.pop(0)
-        inf = revise(assignment, csp, constraint.var1, constraint.var2, constraint)
-        if inf != None:
-            if len(inf) != 0:
-                for otherConstraint in csp.binaryConstraints:
-                    if (otherConstraint.affects(constraint.var2)) and (otherConstraint.otherVariable(constraint.var2) != constraint.var1):
-                        queue.append(otherConstraint)
-        else:
-            return None
+        var1, var2 = queue.pop(0)
+        for constraint in csp.binaryConstraints:
+            inf = set([])
+            if constraint.affects(var1) and constraint.affects(var2):
+                inf = revise(assignment, csp, var1, var2, constraint)
+            if inf != None:
+                if len(inf) != 0:
+                    inferences.union(inf)
+                    for otherConstraint in csp.binaryConstraints:
+                        if (otherConstraint.affects(var2)) and (otherConstraint.otherVariable(var2) != var1):
+                            queue.append((var2, otherConstraint.otherVariable(var2)))
+            else:
+                for inference in inferences:
+                    assignment.varDomains[inference[0]].add(inference[1])
+                return None
     return assignment
     raise_undefined_error()
 
