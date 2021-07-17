@@ -63,7 +63,8 @@ def recursiveBacktracking(assignment, csp, orderValuesMethod, selectVariableMeth
         return assignment
     var = selectVariableMethod(assignment, csp)
     if var == None:
-        return assignment
+        return None
+    inferences = set([])
     for value in orderValuesMethod(assignment, csp, var):
         if consistent(assignment, csp, var, value):
             assignment.assignedValues[var] = value
@@ -73,8 +74,8 @@ def recursiveBacktracking(assignment, csp, orderValuesMethod, selectVariableMeth
                 if result != None:
                     return result
                 for item in inferences:
-                    assignment.assignedValues[item[0]] = item[1]
-        assignment.assignedValues[var] = None
+                    assignment.varDomains[item[0]].add(item[1])
+    assignment.assignedValues[var] = None
     return None
     raise_undefined_error()
 
@@ -130,10 +131,10 @@ def minimumRemainingValuesHeuristic(assignment, csp):
 
     # TODO: Question 2
     unassigned = [var for var in assignment.varDomains if not assignment.isAssigned(var)]
-    if len(assignment.varDomains) != 0:
+    if len(unassigned) != 0:
         min = list(unassigned)[0]
-        for var in assignment.varDomains:
-            if (var in unassigned) and (var != min):
+        for var in unassigned:
+            if var != min:
                 r = len(assignment.varDomains[var])
                 n = len(assignment.varDomains[min])
                 if r < n:
@@ -188,7 +189,7 @@ def leastConstrainingValuesHeuristic(assignment, csp, var):
         count = 0
         for constraint in constraints:
             if constraint.affects(var):
-                count += len([val for val in assignment.varDomains[constraint.otherVariable(var)] if not constraint.isSatisfied(val, value)])
+                count += len([val for val in assignment.varDomains[constraint.otherVariable(var)] if constraint.isSatisfied(val, value)])
         pairs.append((value, count))
     return [item[0] for item in sorted(pairs, key=lambda x: x[1])]
     raise_undefined_error()
@@ -231,14 +232,16 @@ def forwardChecking(assignment, csp, var, value):
     connectedConstraints = [constraint for constraint in csp.binaryConstraints if constraint.affects(var)]
     for constraint in connectedConstraints:
         connectedVariable = constraint.otherVariable(var)
+        if not assignment.varDomains[connectedVariable]:
+            return None
         if assignment.isAssigned(connectedVariable):
             if not constraint.isSatisfied(value, assignment.assignedValues[connectedVariable]):
-                return None 
+                return None
         else:
             domain = assignment.varDomains[connectedVariable].copy()
             count = 0
             for val in domain:
-                if not consistent(assignment, csp, connectedVariable, val):
+                if not constraint.isSatisfied(value, val):
                     inferences.add((connectedVariable, val))
                     count += 1
             if len(domain) == count:
@@ -317,22 +320,47 @@ def maintainArcConsistency(assignment, csp, var, value):
     #  Hint: implement revise first and use it as a helper function"""
     if not consistent(assignment, csp, var, value):
         return None
-    queue = [constraint for constraint in csp.binaryConstraints if (constraint.affects(var) and not assignment.isAssigned(constraint.otherVariable(var)))]
+    if len(domains) == 0:
+        return None
+    queue = []
+    for var in assignment.varDomains.keys():
+        queue += [(var, constraint.otherVariable(var)) for constraint in csp.binaryConstraints if (constraint.affects(var)) and (not assignment.isAssigned(constraint.otherVariable(var)))]
     while queue != []:
-        constraint = queue.pop(0)
-        connectedVariable = constraint.otherVariable(var)
-        inf = revise(assignment, csp, var, connectedVariable, constraint)
-        if inf != None:
-            inferences.union(inf)
-            if len(inf) != 0:
-                for otherConstraint in csp.binaryConstraints:
-                    if (otherConstraint.affects(connectedVariable)) and (otherConstraint.otherVariable(connectedVariable) != var):
-                        queue.append(otherConstraint)
-        else:
-            for inference in inferences:
-                assignment.varDomains[inference[0]].add(inference[1])
-            return None
+        (var1, var2) = queue.pop(0)
+    #     connectedVariable = constraint.otherVariable(var)
+    #     inf = revise(assignment, csp, var, connectedVariable, constraint)
+    #     if inf != None:
+    #         inferences.union(inf)
+    #         if len(inf) != 0:
+    #             for otherConstraint in csp.binaryConstraints:
+    #                 if (otherConstraint.affects(connectedVariable)) and (otherConstraint.otherVariable(connectedVariable) != var):
+    #                     queue.append(otherConstraint)
+    #     else:
+    #         for inference in inferences:
+    #             assignment.varDomains[inference[0]].add(inference[1])
+    #         return None
+    # return inferences
+    
+        for constraint in csp.binaryConstraints:
+            inf = set([])
+            if constraint.affects(var1) and constraint.affects(var2):
+                inf = revise(assignment, csp, var1, var2, constraint)
+                if inf != None:
+                    if len(inf) != 0:
+                        inferences.union(inf)
+                        for otherConstraint in csp.binaryConstraints:
+                            if (otherConstraint.affects(var2)):
+                                if len(assignment.varDomains[otherConstraint.otherVariable(var2)]) == 0:
+                                    for inference in inferences:
+                                        assignment.varDomains[inference[0]].add(inference[1])
+                                    return None
+                                queue.append((var2, otherConstraint.otherVariable(var2)))
+                else:
+                    for inference in inferences:
+                        assignment.varDomains[inference[0]].add(inference[1])
+                    return None
     return inferences
+    
     raise_undefined_error()
 
 
@@ -358,7 +386,7 @@ def AC3(assignment, csp):
     #  Hint: implement revise first and use it as a helper function"""
     queue = []
     for var in assignment.varDomains.keys():
-        queue += [(constraint.var1, constraint.var2) for constraint in csp.binaryConstraints if constraint.affects(var)]
+        queue += [(var, constraint.otherVariable(var)) for constraint in csp.binaryConstraints if constraint.affects(var)]
     while queue != []:
         var1, var2 = queue.pop(0)
         for constraint in csp.binaryConstraints:
