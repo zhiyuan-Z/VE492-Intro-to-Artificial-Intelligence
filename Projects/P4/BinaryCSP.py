@@ -317,7 +317,6 @@ def maintainArcConsistency(assignment, csp, var, value):
     domains = assignment.varDomains
 
     # TODO: Question 5
-    #  Hint: implement revise first and use it as a helper function"""
     if not consistent(assignment, csp, var, value):
         return None
     if len(domains) == 0:
@@ -327,27 +326,13 @@ def maintainArcConsistency(assignment, csp, var, value):
         queue += [(var, constraint.otherVariable(var)) for constraint in csp.binaryConstraints if (constraint.affects(var)) and (not assignment.isAssigned(constraint.otherVariable(var)))]
     while queue != []:
         (var1, var2) = queue.pop(0)
-    #     connectedVariable = constraint.otherVariable(var)
-    #     inf = revise(assignment, csp, var, connectedVariable, constraint)
-    #     if inf != None:
-    #         inferences.union(inf)
-    #         if len(inf) != 0:
-    #             for otherConstraint in csp.binaryConstraints:
-    #                 if (otherConstraint.affects(connectedVariable)) and (otherConstraint.otherVariable(connectedVariable) != var):
-    #                     queue.append(otherConstraint)
-    #     else:
-    #         for inference in inferences:
-    #             assignment.varDomains[inference[0]].add(inference[1])
-    #         return None
-    # return inferences
-    
         for constraint in csp.binaryConstraints:
             inf = set([])
             if constraint.affects(var1) and constraint.affects(var2):
                 inf = revise(assignment, csp, var1, var2, constraint)
                 if inf != None:
                     if len(inf) != 0:
-                        inferences.union(inf)
+                        inferences = inferences.union(inf)
                         for otherConstraint in csp.binaryConstraints:
                             if (otherConstraint.affects(var2)):
                                 if len(assignment.varDomains[otherConstraint.otherVariable(var2)]) == 0:
